@@ -1,36 +1,101 @@
-# This is a basic workflow to help you get started with Actions
+name: Docker
 
-name: CI2
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
+  schedule:
+    - cron: '0 0 * * *'  # Run daily at midnight UTC
   push:
     branches: [ "main" ]
+    tags: [ 'v*.*.*' ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:  # Allow manual triggering
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Check for new Containerlab release
+        id: check_release
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          latest_release=$(curl -s https://api.github.com/repos/srl-labs/containerlab/releases/latest | jq -r .tag_name)
+          echo "Latest Containerlab release: $latest_release"
+          echo "CONTAINERLAB_VERSION=${latest_release#v}" >> $GITHUB_ENV
+          
+          # Check if we need to build a new image
+          if ! docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$latest_release &> /dev/null; then
+            echo "BUILD_NEEDED=true" >> $GITHUB_ENV
+          else
+            echo "BUILD_NEEDED=false" >> $GITHUB_ENV
+          fi
+
+      - name: Install cosign
+        if: env.BUILD_NEEDED == 'true'
+        uses: sigstore/cosign-installer@v3.5.0
+        with:
+          cosign-release: 'v2.2.4'
+
+      - name: Set up Docker Buildx
+        if: env.BUILD_NEEDED == 'true'
+        uses: docker/setup-buildx-action@v3.0.0
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        if: env.BUILD_NEEDED == 'true'
+        uses: docker/login-action@v3.0.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        if: env.BUILD_NEEDED == 'true'
+        id: meta
+        uses: docker/metadata-action@v5.0.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ env.CONTAINERLAB_VERSION }}
+
+      - name: Build and push Docker image
+        if: env.BUILD_NEEDED == 'true'
+        id: build-and-push
+        uses: docker/build-push-action@v5.0.0
+        with:
+          context: build
+          file: build/dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            CONTAINERLAB_VERSION=${{ env.CONTAINERLAB_VERSION }}
+
+      - name: Sign the published Docker image
+        if: env.BUILD_NEEDED == 'true'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+        run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
+
+      - name: Update README
+        if: env.BUILD_NEEDED == 'true'
+        run: |
+          sed -i 's/CONTAINERLAB_VERSION="[0-9.]*"/CONTAINERLAB_VERSION="${{ env.CONTAINERLAB_VERSION }}"/' README.md
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add README.md
+          git commit -m "Update Containerlab version to ${{ env.CONTAINERLAB_VERSION }}"
+          git push
