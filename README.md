@@ -19,7 +19,7 @@ docker ghcr.io/flosch62/clab-dind:latest
 
 To run the container:
 ```bash
-docker run -it --privileged --cgroupns=host clab-dind
+docker run -it --privileged --cgroupns=host ghcr.io/flosch62/clab-dind:latest
 ```
 
 This command:
