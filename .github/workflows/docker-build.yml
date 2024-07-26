@@ -29,8 +29,7 @@ jobs:
       - name: Check for new Containerlab release
         id: check_release
         run: |
-          # Simulate latest release
-          latest_release="v0.55.1"
+          latest_release=$(curl -s https://api.github.com/repos/srl-labs/containerlab/releases/latest | jq -r .tag_name)
           echo "Latest Containerlab release: $latest_release"
           echo "CONTAINERLAB_VERSION=${latest_release#v}" >> $GITHUB_ENV
 
@@ -40,9 +39,6 @@ jobs:
           else
             echo "BUILD_NEEDED=false" >> $GITHUB_ENV
           fi
-          # Force build for testing
-          echo "BUILD_NEEDED=true" >> $GITHUB_ENV
-
 
       - name: Install cosign
         if: env.BUILD_NEEDED == 'true'
