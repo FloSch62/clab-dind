@@ -26,7 +26,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-        - name: Check for new Containerlab release
+      - name: Check for new Containerlab release
         id: check_release
         run: |
           latest_release=$(curl -s https://api.github.com/repos/srl-labs/containerlab/releases/latest | jq -r .tag_name)
@@ -37,7 +37,7 @@ jobs:
           # Check if we need to build a new image
           full_image_name="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$latest_release"
           echo "Checking for image: $full_image_name"
-
+          
           if docker pull "$full_image_name" &> /dev/null; then
             echo "Image $full_image_name found. No build needed."
             echo "BUILD_NEEDED=false" >> $GITHUB_ENV
@@ -45,7 +45,7 @@ jobs:
             echo "Image $full_image_name not found. Build needed."
             echo "BUILD_NEEDED=true" >> $GITHUB_ENV
           fi
-
+          
           echo "BUILD_NEEDED: ${{ env.BUILD_NEEDED }}"
 
       - name: Install cosign
