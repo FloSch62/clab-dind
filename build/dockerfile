@@ -1,0 +1,69 @@
+# Use Debian Bookworm slim as the base image
+FROM --platform=linux/amd64 debian:bookworm-slim
+
+# Use bash as the default shell and enable pipefail option
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Define build arguments for Docker and Containerlab versions
+ARG DOCKER_VERSION="5:27.*"
+ARG CONTAINERLAB_VERSION="0.56.0"
+
+# Avoid prompts from apt during installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install necessary packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    wget \
+    gnupg \
+    lsb-release \
+    git \
+    vim \
+    tcpdump \
+    openssh-client \
+    inetutils-ping \
+    traceroute \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add NetDevOps repository
+RUN echo "deb [trusted=yes] https://apt.fury.io/netdevops/ /" | \
+    tee -a /etc/apt/sources.list.d/netdevops.list
+
+# Add Docker's official GPG key
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | \
+    gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+# Set up the Docker repository
+RUN echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
+    $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Install Containerlab and Docker
+RUN apt-get update && \
+    apt-get install -yq --no-install-recommends \
+            containerlab=${CONTAINERLAB_VERSION} \
+            docker-ce=${DOCKER_VERSION} \
+            docker-ce-cli=${DOCKER_VERSION} && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/archive/*.deb
+
+# Set the working directory
+WORKDIR /workspace
+
+# Copy the entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Configure Docker to use vfs storage driver as overlay2 errors out
+RUN mkdir -p /etc/docker && \
+    echo '{"storage-driver": "vfs"}' > /etc/docker/daemon.json
+
+# Copy a custom bashrc for improved shell experience
+COPY .bashrc /root/.bashrc
+
+# Set the entrypoint to our script
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Set the default command
+CMD ["bash"]
