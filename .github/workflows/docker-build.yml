@@ -55,12 +55,6 @@ jobs:
             
             echo "BUILD_NEEDED: ${{ env.BUILD_NEEDED }}"
 
-      - name: Install cosign
-        if: env.BUILD_NEEDED == 'true'
-        uses: sigstore/cosign-installer@v3.5.0
-        with:
-          cosign-release: 'v2.2.4'
-
       - name: Set up Docker Buildx
         if: env.BUILD_NEEDED == 'true'
         uses: docker/setup-buildx-action@v3.0.0
@@ -97,13 +91,6 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             CONTAINERLAB_VERSION=${{ env.CONTAINERLAB_VERSION }}
-
-      - name: Sign the published Docker image
-        if: env.BUILD_NEEDED == 'true'
-        env:
-          TAGS: ${{ steps.meta.outputs.tags }}
-          DIGEST: ${{ steps.build-and-push.outputs.digest }}
-        run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
 
       - name: Update README
         if: env.BUILD_NEEDED == 'true'
