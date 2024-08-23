@@ -38,4 +38,4 @@ containerlab deploy -t your_topology.yml
 
 This image is automatically built and pushed to GitHub Container Registry whenever a new version of Containerlab is released. The current Containerlab version in the latest image is:
 
-CONTAINERLAB_VERSION="0.56.0"
+CONTAINERLAB_VERSION="0.57.0"
